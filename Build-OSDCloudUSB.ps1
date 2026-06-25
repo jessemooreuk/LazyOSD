@@ -1,14 +1,14 @@
 # Build-OSDCloudUSB.ps1
-# Fully automated and more compatible OSDCloud build script
+# Fully automated OSDCloud build with correct ISO detection
 
 Write-Host "=== OSDCloud Automated Build ===" -ForegroundColor Cyan
 
-# === Project Name ===
+# Project Name
 $ProjectName = Read-Host "Enter Project Name (used for Workspace and ISO filename)"
 if ([string]::IsNullOrWhiteSpace($ProjectName)) { $ProjectName = "OSDCloud-Autopilot" }
 Write-Host "Project: $ProjectName" -ForegroundColor Green
 
-# === Progress vs Verbose ===
+# Progress vs Verbose
 $mode = Read-Host "Show simple progress bar or verbose output? (P = Progress bar, V = Verbose)"
 $UseProgressBar = ($mode.ToUpper() -eq "P")
 
@@ -27,12 +27,7 @@ function Write-BuildStep {
     }
 }
 
-function Write-BuildError {
-    param([string]$Message)
-    Write-Host "ERROR: $Message" -ForegroundColor Red
-}
-
-# === Download scripts ===
+# Download scripts
 Write-BuildStep "Downloading required scripts..." 10
 
 $workspaceRoot = "$env:ProgramData\OSDCloud\Workspace"
@@ -44,11 +39,11 @@ try {
     Invoke-WebRequest -Uri "$baseUrl/Collect-AutopilotHash-WinPE.ps1" -OutFile "$workspaceRoot\Collect-AutopilotHash-WinPE.ps1" -UseBasicParsing -ErrorAction Stop
     Invoke-WebRequest -Uri "$baseUrl/AuditMode-AutopilotUpload.ps1" -OutFile "$workspaceRoot\AuditMode-AutopilotUpload.ps1" -UseBasicParsing -ErrorAction Stop
 } catch {
-    Write-BuildError "Failed to download scripts from GitHub. $_"
+    Write-Host "ERROR: Failed to download scripts. $_" -ForegroundColor Red
     exit
 }
 
-# Place Unattend.xml in workspace root (OSDCloud picks it up automatically)
+# Place Unattend.xml in workspace root
 $unattendContent = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -71,7 +66,7 @@ $unattendContent = @'
 
 $unattendContent | Out-File -FilePath "$workspaceRoot\Unattend.xml" -Encoding utf8 -Force
 
-# === Core OSDCloud Build ===
+# Core build
 Write-BuildStep "Updating OSD module..." 20
 Install-Module OSD -Force -AllowClobber
 Import-Module OSD -Force
@@ -83,15 +78,13 @@ New-OSDCloudWorkspace -Name $ProjectName
 Write-BuildStep "Adding Intel drivers..." 45
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
 
-Write-BuildStep "Finalizing WinPE image..." 60
+Write-BuildStep "Finalizing WinPE..." 60
 Edit-OSDCloudWinPE
 
-# === Output Choice ===
-Write-BuildStep "Build steps complete. Choosing output..." 80
+# Output choice
+Write-BuildStep "Build complete. Choosing output format..." 80
 
 $choice = Read-Host "Create USB, ISO, or Both? (U = USB, I = ISO, B = Both)"
-
-$isoPath = $null
 
 switch ($choice.ToUpper()) {
     "U" { 
@@ -101,13 +94,20 @@ switch ($choice.ToUpper()) {
     "I" { 
         Write-Host "Creating ISO..." -ForegroundColor Yellow
         New-OSDCloudISO
-        # Rename ISO to Project Name if possible
-        $latestIso = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*.iso" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+        # Correctly find the newly created ISO in C:\OSDCloud
+        Start-Sleep -Seconds 2
+        $latestIso = Get-ChildItem -Path "C:\OSDCloud" -Filter "*.iso" | 
+                     Sort-Object LastWriteTime -Descending | 
+                     Select-Object -First 1
+
         if ($latestIso) {
             $newName = "$ProjectName.iso"
-            Rename-Item -Path $latestIso.FullName -NewName $newName -Force
-            $isoPath = Join-Path $latestIso.DirectoryName $newName
-            Write-Host "ISO renamed to: $newName" -ForegroundColor Green
+            $destination = Join-Path "$env:USERPROFILE\Downloads" $newName
+            Move-Item -Path $latestIso.FullName -Destination $destination -Force
+            Write-Host "ISO renamed and moved to: $destination" -ForegroundColor Green
+        } else {
+            Write-Host "Warning: Could not find the created ISO to rename." -ForegroundColor Yellow
         }
     }
     "B" { 
@@ -115,12 +115,17 @@ switch ($choice.ToUpper()) {
         New-OSDCloudUSB
         Write-Host "Creating ISO..." -ForegroundColor Yellow
         New-OSDCloudISO
-        $latestIso = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*.iso" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+        Start-Sleep -Seconds 2
+        $latestIso = Get-ChildItem -Path "C:\OSDCloud" -Filter "*.iso" | 
+                     Sort-Object LastWriteTime -Descending | 
+                     Select-Object -First 1
+
         if ($latestIso) {
             $newName = "$ProjectName.iso"
-            Rename-Item -Path $latestIso.FullName -NewName $newName -Force
-            $isoPath = Join-Path $latestIso.DirectoryName $newName
-            Write-Host "ISO renamed to: $newName" -ForegroundColor Green
+            $destination = Join-Path "$env:USERPROFILE\Downloads" $newName
+            Move-Item -Path $latestIso.FullName -Destination $destination -Force
+            Write-Host "ISO renamed and moved to: $destination" -ForegroundColor Green
         }
     }
     default { 
@@ -129,10 +134,7 @@ switch ($choice.ToUpper()) {
     }
 }
 
-if ($UseProgressBar) { 
-    Write-Progress -Activity "Building $ProjectName" -Completed 
-}
+if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Completed }
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
-if ($isoPath) { Write-Host "ISO saved as: $isoPath" -ForegroundColor Green }
