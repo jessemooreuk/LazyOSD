@@ -5,104 +5,58 @@
 **Includes all common Intel wireless and LAN drivers**  
 **OSDCloud supports WiFi Connection**
 
-**Recommended Workflow (Local Scripts Version)**
+**Fully Automated Build (Recommended)**
 
-This guide uses **local scripts** (no internet download during deployment). This is more reliable and works offline.
+Use the `Build-OSDCloudUSB.ps1` script to automate everything including copying local scripts into the workspace.
 
-## Stage 1: WinPE – Install Windows + Collect Hash
+## 1. Download the Build Script + Supporting Scripts
 
-### 1. Prepare OSDCloud
+Download these three files:
 
-```powershell
-Install-Module OSD -Force -AllowClobber
-Import-Module OSD -Force
-
-New-OSDCloudTemplate -WinRE -Verbose
-New-OSDCloudWorkspace -Verbose
-Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose
-```
-
-### 2. Add Scripts Locally (Recommended)
-
-Download these two scripts and copy them into your workspace:
-
+- `Build-OSDCloudUSB.ps1`
 - `Collect-AutopilotHash-WinPE.ps1`
 - `AuditMode-AutopilotUpload.ps1`
 
-**Download links:**
+**Links:**
+- https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Build-OSDCloudUSB.ps1
 - https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Collect-AutopilotHash-WinPE.ps1
 - https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/AuditMode-AutopilotUpload.ps1
 
-Then run:
+## 2. Prepare Your Scripts Folder
 
+Create a folder on your build PC, for example:
 ```powershell
-$scriptsPath = "$env:ProgramData\OSDCloud\Workspace\Scripts"
-New-Item -Path $scriptsPath -ItemType Directory -Force
-
-Copy-Item "C:\Path\To\Your\Scripts\Collect-AutopilotHash-WinPE.ps1" -Destination $scriptsPath -Force
-Copy-Item "C:\Path\To\Your\Scripts\AuditMode-AutopilotUpload.ps1" -Destination $scriptsPath -Force
-
-# Make scripts available in WinPE
-Edit-OSDCloudWinPE -ScriptPath "$scriptsPath\Collect-AutopilotHash-WinPE.ps1" -Verbose
-Edit-OSDCloudWinPE -ScriptPath "$scriptsPath\AuditMode-AutopilotUpload.ps1" -Verbose
+New-Item -Path "C:\OSDCloudScripts" -ItemType Directory -Force
 ```
 
-### 3. Configure Audit Mode
+Copy the two scripts (`Collect-AutopilotHash-WinPE.ps1` and `AuditMode-AutopilotUpload.ps1`) into `C:\OSDCloudScripts`.
+
+## 3. Run the Automated Build
 
 ```powershell
-$unattend = @'
-<?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend">
-  <settings pass="oobeSystem">
-    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <Reseal>
-        <Mode>Audit</Mode>
-      </Reseal>
-    </component>
-  </settings>
-</unattend>
-'@ 
-
-$unattend | Out-File -FilePath "$env:ProgramData\OSDCloud\Unattend.xml" -Encoding utf8 -Force
-Edit-OSDCloudWinPE -Unattend "$env:ProgramData\OSDCloud\Unattend.xml" -Verbose
+# Run this script (it will do everything automatically)
+. C:\Path\To\Build-OSDCloudUSB.ps1
 ```
 
-### 4. Build the USB
+The build script will:
+- Update the OSD module
+- Create Template + Workspace
+- Add Intel drivers
+- Copy your local scripts into the workspace
+- Configure Unattend for Audit Mode
+- Build the final USB
 
-```powershell
-New-OSDCloudUSB
-```
+## 4. What You Get
 
-## Stage 2: Audit Mode – Upload Hash
+Your USB will:
+- Install Windows 11
+- Collect and save the hardware hash locally
+- Boot into Audit Mode automatically
+- Run the upload script in Audit Mode (with WiFi prompt)
+- Automatically exit to normal OOBE after upload
 
-After Windows installs, the device boots into **Audit Mode**.
-
-Run this command in Audit Mode:
-
-```powershell
-powershell -NoLogo -File "X:\Scripts\AuditMode-AutopilotUpload.ps1"
-```
-
-The script will:
-- Prompt you to connect to WiFi
-- Use Device Code Flow (works with any tenant)
-- Upload the hardware hash
-- Automatically run `sysprep /oobe /reboot`
-
-## Files Available in This Repository
-
-All scripts are published locally:
-
-- `Collect-AutopilotHash-WinPE.ps1` – WinPE hash collection
-- `AuditMode-AutopilotUpload.ps1` – Audit Mode upload + exit to OOBE
-
-## Summary
-
-- Fully tenant-agnostic
-- Scripts run locally from the USB
-- Reliable Audit Mode workflow
-- WiFi + Intel drivers supported
+All scripts run locally from the USB (no internet required during deployment).
 
 ---
 
-**This is the recommended stable configuration.**
+**This is the most automated and reliable setup.**
