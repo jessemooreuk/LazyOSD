@@ -1,25 +1,39 @@
 # Build-OSDCloudUSB.ps1
-# Fully automated OSDCloud build with progress/verbose option
+# Fully automated and more compatible OSDCloud build script
 
 Write-Host "=== OSDCloud Automated Build ===" -ForegroundColor Cyan
 
-# Project Name
-$ProjectName = Read-Host "Enter Project Name"
+# === Project Name ===
+$ProjectName = Read-Host "Enter Project Name (used for Workspace and ISO filename)"
 if ([string]::IsNullOrWhiteSpace($ProjectName)) { $ProjectName = "OSDCloud-Autopilot" }
+Write-Host "Project: $ProjectName" -ForegroundColor Green
 
-# Progress vs Verbose choice
+# === Progress vs Verbose ===
 $mode = Read-Host "Show simple progress bar or verbose output? (P = Progress bar, V = Verbose)"
 $UseProgressBar = ($mode.ToUpper() -eq "P")
 
 if ($UseProgressBar) {
-    Write-Host "Progress bar mode enabled (errors will still be shown)." -ForegroundColor Green
+    Write-Host "Progress bar mode enabled (errors will still show)." -ForegroundColor Green
 } else {
     Write-Host "Verbose mode enabled." -ForegroundColor Green
 }
 
-# Download scripts
-if ($UseProgressBar) { Write-Progress -Activity "Build" -Status "Downloading scripts..." -PercentComplete 10 }
-else { Write-Host "Downloading scripts..." -ForegroundColor Yellow }
+function Write-BuildStep {
+    param([string]$Message, [int]$Percent)
+    if ($UseProgressBar) {
+        Write-Progress -Activity "Building $ProjectName" -Status $Message -PercentComplete $Percent
+    } else {
+        Write-Host $Message -ForegroundColor Yellow
+    }
+}
+
+function Write-BuildError {
+    param([string]$Message)
+    Write-Host "ERROR: $Message" -ForegroundColor Red
+}
+
+# === Download scripts ===
+Write-BuildStep "Downloading required scripts..." 10
 
 $workspaceRoot = "$env:ProgramData\OSDCloud\Workspace"
 New-Item -Path $workspaceRoot -ItemType Directory -Force | Out-Null
@@ -30,34 +44,12 @@ try {
     Invoke-WebRequest -Uri "$baseUrl/Collect-AutopilotHash-WinPE.ps1" -OutFile "$workspaceRoot\Collect-AutopilotHash-WinPE.ps1" -UseBasicParsing -ErrorAction Stop
     Invoke-WebRequest -Uri "$baseUrl/AuditMode-AutopilotUpload.ps1" -OutFile "$workspaceRoot\AuditMode-AutopilotUpload.ps1" -UseBasicParsing -ErrorAction Stop
 } catch {
-    Write-Host "ERROR downloading scripts: $_" -ForegroundColor Red
+    Write-BuildError "Failed to download scripts from GitHub. $_"
     exit
 }
 
-if ($UseProgressBar) { Write-Progress -Activity "Build" -Status "Scripts downloaded." -PercentComplete 25 }
-
-# Core build steps
-if (-not $UseProgressBar) { Write-Host "Updating OSD module..." -ForegroundColor Yellow }
-Install-Module OSD -Force -AllowClobber
-Import-Module OSD -Force
-
-if ($UseProgressBar) { Write-Progress -Activity "Build" -Status "Creating Template and Workspace..." -PercentComplete 35 }
-else { Write-Host "Creating Template and Workspace..." -ForegroundColor Yellow }
-
-New-OSDCloudTemplate -WinRE -Verbose:$(-not $UseProgressBar)
-New-OSDCloudWorkspace -Name $ProjectName -Verbose:$(-not $UseProgressBar)
-
-if ($UseProgressBar) { Write-Progress -Activity "Build" -Status "Adding drivers..." -PercentComplete 50 }
-else { Write-Host "Adding Intel drivers..." -ForegroundColor Yellow }
-
-Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose:$(-not $UseProgressBar)
-Edit-OSDCloudWinPE -Verbose:$(-not $UseProgressBar)
-
-# Unattend
-if ($UseProgressBar) { Write-Progress -Activity "Build" -Status "Configuring Unattend..." -PercentComplete 65 }
-else { Write-Host "Configuring Unattend for Audit Mode..." -ForegroundColor Yellow }
-
-$unattend = @'
+# Place Unattend.xml in workspace root (OSDCloud picks it up automatically)
+$unattendContent = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
   <settings pass="oobeSystem">
@@ -77,40 +69,70 @@ $unattend = @'
 </unattend>
 '@ 
 
-$unattend | Out-File -FilePath "$env:ProgramData\OSDCloud\Unattend.xml" -Encoding utf8 -Force
-Edit-OSDCloudWinPE -Unattend "$env:ProgramData\OSDCloud\Unattend.xml" -Verbose:$(-not $UseProgressBar)
+$unattendContent | Out-File -FilePath "$workspaceRoot\Unattend.xml" -Encoding utf8 -Force
 
-# Final output choice
-if ($UseProgressBar) { Write-Progress -Activity "Build" -Status "Ready to create output..." -PercentComplete 85 }
-else { Write-Host "Build steps complete." -ForegroundColor Green }
+# === Core OSDCloud Build ===
+Write-BuildStep "Updating OSD module..." 20
+Install-Module OSD -Force -AllowClobber
+Import-Module OSD -Force
 
-$choice = Read-Host "Create USB, ISO, or Both? (U/I/B)"
+Write-BuildStep "Creating Template and Workspace..." 30
+New-OSDCloudTemplate -WinRE
+New-OSDCloudWorkspace -Name $ProjectName
+
+Write-BuildStep "Adding Intel drivers..." 45
+Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
+
+Write-BuildStep "Finalizing WinPE image..." 60
+Edit-OSDCloudWinPE
+
+# === Output Choice ===
+Write-BuildStep "Build steps complete. Choosing output..." 80
+
+$choice = Read-Host "Create USB, ISO, or Both? (U = USB, I = ISO, B = Both)"
+
+$isoPath = $null
 
 switch ($choice.ToUpper()) {
     "U" { 
-        if (-not $UseProgressBar) { Write-Host "Creating USB..." -ForegroundColor Yellow }
+        Write-Host "Creating USB..." -ForegroundColor Yellow
         New-OSDCloudUSB 
     }
     "I" { 
-        if (-not $UseProgressBar) { Write-Host "Creating ISO named $ProjectName..." -ForegroundColor Yellow }
-        New-OSDCloudISO -Name $ProjectName 
+        Write-Host "Creating ISO..." -ForegroundColor Yellow
+        New-OSDCloudISO
+        # Rename ISO to Project Name if possible
+        $latestIso = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*.iso" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($latestIso) {
+            $newName = "$ProjectName.iso"
+            Rename-Item -Path $latestIso.FullName -NewName $newName -Force
+            $isoPath = Join-Path $latestIso.DirectoryName $newName
+            Write-Host "ISO renamed to: $newName" -ForegroundColor Green
+        }
     }
     "B" { 
-        if (-not $UseProgressBar) { Write-Host "Creating USB..." -ForegroundColor Yellow }
+        Write-Host "Creating USB..." -ForegroundColor Yellow
         New-OSDCloudUSB
-        if (-not $UseProgressBar) { Write-Host "Creating ISO named $ProjectName..." -ForegroundColor Yellow }
-        New-OSDCloudISO -Name $ProjectName 
+        Write-Host "Creating ISO..." -ForegroundColor Yellow
+        New-OSDCloudISO
+        $latestIso = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*.iso" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($latestIso) {
+            $newName = "$ProjectName.iso"
+            Rename-Item -Path $latestIso.FullName -NewName $newName -Force
+            $isoPath = Join-Path $latestIso.DirectoryName $newName
+            Write-Host "ISO renamed to: $newName" -ForegroundColor Green
+        }
     }
     default { 
-        if (-not $UseProgressBar) { Write-Host "Creating USB..." -ForegroundColor Yellow }
+        Write-Host "Creating USB..." -ForegroundColor Yellow
         New-OSDCloudUSB 
     }
 }
 
 if ($UseProgressBar) { 
-    Write-Progress -Activity "Build" -Status "Complete" -PercentComplete 100 -Completed 
-} else { 
-    Write-Host "=== Build Complete ===" -ForegroundColor Green 
+    Write-Progress -Activity "Building $ProjectName" -Completed 
 }
 
+Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
+if ($isoPath) { Write-Host "ISO saved as: $isoPath" -ForegroundColor Green }
