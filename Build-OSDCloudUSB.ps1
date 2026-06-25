@@ -1,7 +1,7 @@
 # Build-OSDCloudUSB.ps1
-# Simplified build focused on Audit Mode automation
+# Properly configures OSDCloud to install Windows 11 + Audit Mode automation
 
-Write-Host "=== OSDCloud Automated Build (Audit Mode Focus) ===" -ForegroundColor Cyan
+Write-Host "=== OSDCloud Automated Build ===" -ForegroundColor Cyan
 
 $ProjectName = Read-Host "Enter Project Name (used for ISO filename)"
 if ([string]::IsNullOrWhiteSpace($ProjectName)) { $ProjectName = "OSDCloud-Autopilot" }
@@ -25,7 +25,7 @@ function Write-BuildStep {
     }
 }
 
-# Download the Audit Mode script
+# Download Audit Mode script
 Write-BuildStep "Downloading Audit Mode script..." 10
 
 $workspaceRoot = "$env:ProgramData\OSDCloud\Workspace"
@@ -36,11 +36,11 @@ $baseUrl = "https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-au
 try {
     Invoke-WebRequest -Uri "$baseUrl/AuditMode-AutopilotUpload.ps1" -OutFile "$workspaceRoot\AuditMode-AutopilotUpload.ps1" -UseBasicParsing -ErrorAction Stop
 } catch {
-    Write-Host "ERROR: Failed to download script. $_" -ForegroundColor Red
+    Write-Host "ERROR downloading script. $_" -ForegroundColor Red
     exit
 }
 
-# Place Unattend.xml for automatic Audit Mode + script execution
+# Unattend for automatic Audit Mode
 $unattendContent = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -53,7 +53,7 @@ $unattendContent = @'
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
           <CommandLine>powershell -NoLogo -File "X:\AuditMode-AutopilotUpload.ps1"</CommandLine>
-          <Description>Collect hash, upload to Autopilot, exit to OOBE</Description>
+          <Description>Collect hash + upload to Autopilot + exit to OOBE</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>
@@ -63,7 +63,7 @@ $unattendContent = @'
 
 $unattendContent | Out-File -FilePath "$workspaceRoot\Unattend.xml" -Encoding utf8 -Force
 
-# Core build
+# Core OSDCloud setup
 Write-BuildStep "Updating OSD module..." 20
 Install-Module OSD -Force -AllowClobber
 Import-Module OSD -Force
@@ -75,11 +75,15 @@ New-OSDCloudWorkspace
 Write-BuildStep "Adding Intel drivers..." 45
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
 
-Write-BuildStep "Finalizing WinPE..." 60
+Write-BuildStep "Configuring Windows 11 deployment..." 55
+# This is the key line that tells OSDCloud to install Windows 11
+Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -ZTI
+
+Write-BuildStep "Finalizing WinPE image..." 70
 Edit-OSDCloudWinPE
 
 # Output choice
-Write-BuildStep "Build complete. Choosing output..." 80
+Write-BuildStep "Build complete. Choosing output format..." 85
 
 $choice = Read-Host "Create USB, ISO, or Both? (U = USB, I = ISO, B = Both)"
 
@@ -115,4 +119,4 @@ if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Complet
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
-Write-Host "Workflow: WinPE (clean install) → Automatic Audit Mode (hash collection + upload + exit to OOBE)" -ForegroundColor Green
+Write-Host "Configured to install: Windows 11 24H2" -ForegroundColor Green
