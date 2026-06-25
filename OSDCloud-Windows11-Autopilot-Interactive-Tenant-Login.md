@@ -1,83 +1,100 @@
 # Automated installation of Windows 11 using OSDCloud
 
 **Booting from a USB Stick**  
-**Automatically registering in Autopilot (Tenant-Agnostic)**  
+**Automatically registering in Autopilot (Tenant-Agnostic + Audit Mode)**  
 **Includes all common Intel wireless and LAN drivers**  
 **OSDCloud supports WiFi Connection**
 
-**Universal / Tenant-Agnostic Version** (June 2026)
+**Recommended Workflow (June 2026)**
 
-This guide creates a **single universal OSDCloud USB** that works with **any Entra ID tenant**.
+This guide uses a reliable two-stage approach:
+
+- **Stage 1 (WinPE)**: Install Windows + collect hardware hash
+- **Stage 2 (Audit Mode)**: Upload hash to Autopilot, then exit to normal OOBE
+
+This avoids the instability of running Graph authentication inside WinPE.
 
 ## Prerequisites
 - Windows 10 (1703+) or Windows 11 PC with administrator rights and internet
 - USB flash drive (16 GB+ recommended)
 
-## Step 1: Install / Update the OSD Module
+## Stage 1: WinPE – Install Windows + Collect Hash
+
+### Step 1: Prepare OSDCloud
 
 ```powershell
-Install-Module OSD -Force -AllowClobber -Verbose
+Install-Module OSD -Force -AllowClobber
 Import-Module OSD -Force
-```
 
-## Step 2: Create OSDCloud Template with WinRE
-
-```powershell
 New-OSDCloudTemplate -WinRE -Verbose
-```
-
-## Step 3: Create the Workspace
-
-```powershell
 New-OSDCloudWorkspace -Verbose
-```
-
-## Step 4: Add All Common Intel Wireless + LAN Drivers
-
-```powershell
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose
 ```
 
-## Step 5: Pre-stage Microsoft.Graph Module (Required for Automatic Upload)
-
-To enable full automatic Autopilot hash upload via Graph in WinPE, you must pre-install the Microsoft.Graph modules into the WinPE image.
-
-Run this command **after** creating the workspace:
+### Step 2: Add Hash Collection Script (WinPE)
 
 ```powershell
-Edit-OSDCloudWinPE -Module Microsoft.Graph.Authentication, Microsoft.Graph.DeviceManagement -Verbose
+Edit-OSDCloudWinPE -WebPSScript https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Collect-AutopilotHash-WinPE.ps1 -Verbose
 ```
 
-> **Note**: This will increase the size of your WinPE image. If space is a concern, you can try just `Microsoft.Graph.Authentication` first.
+### Step 3: Configure to Boot into Audit Mode
 
-## Step 6: Add the Tenant-Agnostic Autopilot Script
+Create a simple Unattend.xml that forces Audit Mode on first boot, then apply it:
 
 ```powershell
-Edit-OSDCloudWinPE -WebPSScript https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Autopilot-Interactive-Login.ps1 -Verbose
+$unattend = @'
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <Reseal>
+        <Mode>Audit</Mode>
+      </Reseal>
+    </component>
+  </settings>
+</unattend>
+'@ 
+
+$unattend | Out-File -FilePath "$env:ProgramData\OSDCloud\Unattend.xml" -Encoding utf8 -Force
+Edit-OSDCloudWinPE -Unattend "$env:ProgramData\OSDCloud\Unattend.xml" -Verbose
 ```
 
-## Step 7: Build the USB
+### Step 4: Build the USB
 
 ```powershell
 New-OSDCloudUSB
 ```
 
-## Step 8: Boot & Deploy
+## Stage 2: Audit Mode – Upload Hash & Exit to OOBE
 
-The script will now be able to use `Connect-MgGraph` and upload the device automatically after the technician authenticates via Device Code Flow.
+After Windows 11 installs, the device will boot into **Audit Mode**.
 
-## Making It Tenant Agnostic
-
-The current script uses only interactive Device Code Flow. No Tenant ID or secrets are stored in the USB.
-
-## Troubleshooting No Output
-
-If you still see no prompt after `Invoke-WebPSScript`, run this manually in WinPE:
+### Run the Audit Mode Upload Script
 
 ```powershell
-powershell -NoLogo -Command "Invoke-WebPSScript 'https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Autopilot-Interactive-Login.ps1' -Verbose"
+powershell -NoLogo -Command "Invoke-WebPSScript 'https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/AuditMode-AutopilotUpload.ps1'"
 ```
+
+This script will:
+- Prompt the technician to connect to WiFi
+- Authenticate using Device Code Flow (tenant-agnostic)
+- Upload the hardware hash to Autopilot
+- Automatically run `sysprep /oobe /reboot` to exit Audit Mode
+
+## Files in This Repository
+
+- `Collect-AutopilotHash-WinPE.ps1` – Runs in WinPE
+- `AuditMode-AutopilotUpload.ps1` – Runs in Audit Mode
+- `App-Registration-for-Autopilot.md` – Optional App Registration guide
+
+## Summary of Your Universal Deployment
+
+- One USB works with any tenant
+- WiFi supported in WinPE
+- All common Intel drivers included
+- Reliable hash upload in Audit Mode
+- Fully automatic exit back to normal OOBE
 
 ---
 
-**You now have a complete universal solution** with pre-staged Graph support for automatic Autopilot registration.
+**This is currently the most stable and recommended workflow.**
