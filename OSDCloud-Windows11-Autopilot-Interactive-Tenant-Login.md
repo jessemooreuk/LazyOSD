@@ -5,22 +5,13 @@
 **Includes all common Intel wireless and LAN drivers**  
 **OSDCloud supports WiFi Connection**
 
-**Recommended Workflow (June 2026)**
+**Recommended Workflow (Local Scripts Version)**
 
-This guide uses a reliable two-stage approach:
-
-- **Stage 1 (WinPE)**: Install Windows + collect hardware hash
-- **Stage 2 (Audit Mode)**: Upload hash to Autopilot, then exit to normal OOBE
-
-This avoids the instability of running Graph authentication inside WinPE.
-
-## Prerequisites
-- Windows 10 (1703+) or Windows 11 PC with administrator rights and internet
-- USB flash drive (16 GB+ recommended)
+This guide uses **local scripts** (no internet download during deployment). This is more reliable and works offline.
 
 ## Stage 1: WinPE – Install Windows + Collect Hash
 
-### Step 1: Prepare OSDCloud
+### 1. Prepare OSDCloud
 
 ```powershell
 Install-Module OSD -Force -AllowClobber
@@ -31,15 +22,32 @@ New-OSDCloudWorkspace -Verbose
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose
 ```
 
-### Step 2: Add Hash Collection Script (WinPE)
+### 2. Add Scripts Locally (Recommended)
+
+Download these two scripts and copy them into your workspace:
+
+- `Collect-AutopilotHash-WinPE.ps1`
+- `AuditMode-AutopilotUpload.ps1`
+
+**Download links:**
+- https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Collect-AutopilotHash-WinPE.ps1
+- https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/AuditMode-AutopilotUpload.ps1
+
+Then run:
 
 ```powershell
-Edit-OSDCloudWinPE -WebPSScript https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Collect-AutopilotHash-WinPE.ps1 -Verbose
+$scriptsPath = "$env:ProgramData\OSDCloud\Workspace\Scripts"
+New-Item -Path $scriptsPath -ItemType Directory -Force
+
+Copy-Item "C:\Path\To\Your\Scripts\Collect-AutopilotHash-WinPE.ps1" -Destination $scriptsPath -Force
+Copy-Item "C:\Path\To\Your\Scripts\AuditMode-AutopilotUpload.ps1" -Destination $scriptsPath -Force
+
+# Make scripts available in WinPE
+Edit-OSDCloudWinPE -ScriptPath "$scriptsPath\Collect-AutopilotHash-WinPE.ps1" -Verbose
+Edit-OSDCloudWinPE -ScriptPath "$scriptsPath\AuditMode-AutopilotUpload.ps1" -Verbose
 ```
 
-### Step 3: Configure to Boot into Audit Mode
-
-Create a simple Unattend.xml that forces Audit Mode on first boot, then apply it:
+### 3. Configure Audit Mode
 
 ```powershell
 $unattend = @'
@@ -59,42 +67,42 @@ $unattend | Out-File -FilePath "$env:ProgramData\OSDCloud\Unattend.xml" -Encodin
 Edit-OSDCloudWinPE -Unattend "$env:ProgramData\OSDCloud\Unattend.xml" -Verbose
 ```
 
-### Step 4: Build the USB
+### 4. Build the USB
 
 ```powershell
 New-OSDCloudUSB
 ```
 
-## Stage 2: Audit Mode – Upload Hash & Exit to OOBE
+## Stage 2: Audit Mode – Upload Hash
 
-After Windows 11 installs, the device will boot into **Audit Mode**.
+After Windows installs, the device boots into **Audit Mode**.
 
-### Run the Audit Mode Upload Script
+Run this command in Audit Mode:
 
 ```powershell
-powershell -NoLogo -Command "Invoke-WebPSScript 'https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/AuditMode-AutopilotUpload.ps1'"
+powershell -NoLogo -File "X:\Scripts\AuditMode-AutopilotUpload.ps1"
 ```
 
-This script will:
-- Prompt the technician to connect to WiFi
-- Authenticate using Device Code Flow (tenant-agnostic)
-- Upload the hardware hash to Autopilot
-- Automatically run `sysprep /oobe /reboot` to exit Audit Mode
+The script will:
+- Prompt you to connect to WiFi
+- Use Device Code Flow (works with any tenant)
+- Upload the hardware hash
+- Automatically run `sysprep /oobe /reboot`
 
-## Files in This Repository
+## Files Available in This Repository
 
-- `Collect-AutopilotHash-WinPE.ps1` – Runs in WinPE
-- `AuditMode-AutopilotUpload.ps1` – Runs in Audit Mode
-- `App-Registration-for-Autopilot.md` – Optional App Registration guide
+All scripts are published locally:
 
-## Summary of Your Universal Deployment
+- `Collect-AutopilotHash-WinPE.ps1` – WinPE hash collection
+- `AuditMode-AutopilotUpload.ps1` – Audit Mode upload + exit to OOBE
 
-- One USB works with any tenant
-- WiFi supported in WinPE
-- All common Intel drivers included
-- Reliable hash upload in Audit Mode
-- Fully automatic exit back to normal OOBE
+## Summary
+
+- Fully tenant-agnostic
+- Scripts run locally from the USB
+- Reliable Audit Mode workflow
+- WiFi + Intel drivers supported
 
 ---
 
-**This is currently the most stable and recommended workflow.**
+**This is the recommended stable configuration.**
