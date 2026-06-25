@@ -5,80 +5,48 @@
 **Includes all common Intel wireless and LAN drivers**  
 **OSDCloud supports WiFi Connection**
 
-**Fully Automated Version (Local Scripts + Auto Execution)**
+**Fully Automated Build (Recommended)**
 
-## Recommended Build Process
+## How to Build
 
-Use the automated build script or follow the steps below.
-
-### 1. Download Scripts
-
-Place these files in `C:\OSDCloudScripts`:
-- `Collect-AutopilotHash-WinPE.ps1`
-- `AuditMode-AutopilotUpload.ps1`
-
-### 2. Run Build (Recommended)
+Run this one-liner in PowerShell:
 
 ```powershell
-. C:\OSDCloudScripts\Build-OSDCloudUSB.ps1
+irm https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Build-OSDCloudUSB.ps1 | iex
 ```
 
-Or do it manually:
+### What Happens During the Build
 
-```powershell
-Install-Module OSD -Force -AllowClobber
-Import-Module OSD -Force
+The build script will:
 
-New-OSDCloudTemplate -WinRE -Verbose
-New-OSDCloudWorkspace -Verbose
+1. Ask you for a **Project Name** (used for Workspace name and ISO filename)
+2. Automatically download the two required runtime scripts
+3. Create Template + Workspace
+4. Add Intel Wireless + LAN drivers
+5. Configure automatic execution in WinPE and Audit Mode
+6. At the end, ask you whether you want to create:
+   - **USB** only
+   - **ISO** only (named after your Project)
+   - **Both** USB and ISO
 
-Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose
+You no longer need to manually place any scripts — everything is handled automatically.
 
-# Copy scripts locally
-$scriptsPath = "$env:ProgramData\OSDCloud\Workspace\Scripts"
-New-Item -Path $scriptsPath -ItemType Directory -Force
-Copy-Item "C:\OSDCloudScripts\Collect-AutopilotHash-WinPE.ps1" -Destination $scriptsPath -Force
-Copy-Item "C:\OSDCloudScripts\AuditMode-AutopilotUpload.ps1" -Destination $scriptsPath -Force
+## After Building
 
-# Make hash collection run automatically in WinPE
-$startnetFile = Get-ChildItem -Path "$env:ProgramData\OSDCloud\Template" -Recurse -Filter "Startnet.cmd" | Select-Object -First 1 -ExpandProperty FullName
-Add-Content -Path $startnetFile -Value "powershell -NoLogo -File X:\Scripts\Collect-AutopilotHash-WinPE.ps1"
+- If you chose **ISO**, you will get an ISO file named after your Project.
+- Boot the ISO/USB on a target machine.
+- The deployment will:
+  - Automatically collect the hardware hash in WinPE
+  - Boot into Audit Mode
+  - Automatically run the upload script in Audit Mode (with WiFi prompt)
+  - Exit to normal OOBE after registration
 
-# Unattend for automatic Audit Mode
-$unattend = @'
-<?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend">
-  <settings pass="oobeSystem">
-    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <Reseal>
-        <Mode>Audit</Mode>
-      </Reseal>
-      <FirstLogonCommands>
-        <SynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <CommandLine>powershell -NoLogo -File "C:\Scripts\AuditMode-AutopilotUpload.ps1"</CommandLine>
-        </SynchronousCommand>
-      </FirstLogonCommands>
-    </component>
-  </settings>
-</unattend>
-'@ 
+## Files in This Repository
 
-$unattend | Out-File -FilePath "$env:ProgramData\OSDCloud\Unattend.xml" -Encoding utf8 -Force
-Edit-OSDCloudWinPE -Unattend "$env:ProgramData\OSDCloud\Unattend.xml" -Verbose
-
-New-OSDCloudUSB
-```
-
-## How It Works
-
-- **WinPE**: Hash collection script runs automatically via modified Startnet.cmd
-- **First Boot**: Boots into Audit Mode automatically
-- **Audit Mode**: Upload script runs automatically via Unattend FirstLogonCommands
-- Script then exits to normal OOBE
-
-All scripts run locally from the USB.
+- `Build-OSDCloudUSB.ps1` — Main automated build script
+- `Collect-AutopilotHash-WinPE.ps1` — Runs in WinPE (auto-executed)
+- `AuditMode-AutopilotUpload.ps1` — Runs in Audit Mode (auto-executed)
 
 ---
 
-**This is the current recommended fully automated configuration.**
+**This is currently the most automated and user-friendly way to build your OSDCloud USB/ISO.**
