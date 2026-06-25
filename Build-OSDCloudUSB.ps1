@@ -1,7 +1,8 @@
 # Build-OSDCloudUSB.ps1
-# Fully automated build - Windows 11 24H2 Enterprise + Audit Mode
+# LazyOSD - Automated Enterprise OSD + Intune Enrollment
+# Windows 11 24H2 Enterprise | Fully Automatic | Audit Mode Workflow
 
-Write-Host "=== OSDCloud Fully Automated Build ===" -ForegroundColor Cyan
+Write-Host "=== LazyOSD - Fully Automated Enterprise Build ===" -ForegroundColor Cyan
 
 $ProjectName = Read-Host "Enter Project Name (used for ISO filename)"
 if ([string]::IsNullOrWhiteSpace($ProjectName)) { $ProjectName = "OSDCloud-Autopilot" }
@@ -82,7 +83,7 @@ Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -
 Write-BuildStep "Finalizing WinPE..." 65
 Edit-OSDCloudWinPE
 
-# Make Start-OSDCloud run automatically on boot (full automation)
+# Make Start-OSDCloud run automatically on boot
 Write-BuildStep "Enabling full automation on boot..." 75
 
 $startnetFile = Get-ChildItem -Path "$env:ProgramData\OSDCloud\Template" -Recurse -Filter "Startnet.cmd" | Select-Object -First 1 -ExpandProperty FullName
@@ -129,4 +130,4 @@ if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Complet
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
-Write-Host "Configured for: Windows 11 24H2 Enterprise (Fully Automatic)" -ForegroundColor Green
+Write-Host "LazyOSD - Windows 11 24H2 Enterprise (Fully Automatic)" -ForegroundColor Green
