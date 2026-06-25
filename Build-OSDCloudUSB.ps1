@@ -40,7 +40,7 @@ try {
     exit
 }
 
-# Create Unattend.xml (placed in workspace - OSDCloud should pick it up)
+# Create Unattend.xml in workspace (compatible method)
 $unattendContent = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
