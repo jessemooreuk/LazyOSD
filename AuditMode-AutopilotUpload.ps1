@@ -2,8 +2,13 @@
 # Runs automatically in Audit Mode
 # Collects hardware hash + uploads to Autopilot + exits to OOBE
 # Tenant-agnostic using Device Code Flow
+#
+# Last Updated: 2026-06-25
+#
+# Part of LazyOSD project: https://github.com/jessemooreuk/LazyOSD
 
 Write-Host "=== Autopilot Registration - Audit Mode ===" -ForegroundColor Cyan
+Write-Host "Last Updated: 2026-06-25" -ForegroundColor DarkGray
 Write-Host ""
 
 # Step 1: Prompt for WiFi if needed

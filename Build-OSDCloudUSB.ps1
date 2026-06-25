@@ -1,12 +1,15 @@
 # Build-OSDCloudUSB.ps1
 # LazyOSD - Fully Automated Enterprise OSD + Intune Enrollment
 #
+# Last Updated: 2026-06-25
+#
 # Credits:
 #   - Built on the excellent OSD PowerShell module by OSDeploy (https://www.osdeploy.com/)
 #   - Automation, enterprise workflow, and specific use case designed by Jesse Moore
 #   - Script logic and refinements developed through detailed interaction with Grok (xAI)
 
 Write-Host "=== LazyOSD - Fully Automated Enterprise Build ===" -ForegroundColor Cyan
+Write-Host "Last Updated: 2026-06-25" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Credits:" -ForegroundColor Yellow
 Write-Host "  - Built on the excellent OSD module by OSDeploy (https://www.osdeploy.com/)" -ForegroundColor Gray
