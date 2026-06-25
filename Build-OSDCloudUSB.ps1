@@ -1,8 +1,7 @@
 # Build-OSDCloudUSB.ps1
-# LazyOSD - Automated Enterprise OSD + Intune Enrollment
-# Windows 11 24H2 Enterprise | Fully Automatic | Audit Mode Workflow
+# LazyOSD - Fully Automated Enterprise OSD + Intune Enrollment
 
-Write-Host "=== LazyOSD - Fully Automated Enterprise Build ===" -ForegroundColor Cyan
+Write-Host "=== LazyOSD - Fully Automated Build ===" -ForegroundColor Cyan
 
 $ProjectName = Read-Host "Enter Project Name (used for ISO filename)"
 if ([string]::IsNullOrWhiteSpace($ProjectName)) { $ProjectName = "OSDCloud-Autopilot" }
@@ -41,7 +40,7 @@ try {
     exit
 }
 
-# Unattend for automatic Audit Mode
+# Create Unattend.xml for Audit Mode + automatic script
 $unattendContent = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -54,7 +53,7 @@ $unattendContent = @'
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
           <CommandLine>powershell -NoLogo -File "X:\AuditMode-AutopilotUpload.ps1"</CommandLine>
-          <Description>Collect + Upload to Autopilot + Exit to OOBE</Description>
+          <Description>Collect hash + upload to Autopilot + exit to OOBE</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>
@@ -64,27 +63,31 @@ $unattendContent = @'
 
 $unattendContent | Out-File -FilePath "$workspaceRoot\Unattend.xml" -Encoding utf8 -Force
 
+# Apply the Unattend properly (this was missing before)
+Write-BuildStep "Applying Unattend for Audit Mode..." 50
+Edit-OSDCloudWinPE -Unattend "$workspaceRoot\Unattend.xml"
+
 # Core setup
-Write-BuildStep "Updating OSD module..." 20
+Write-BuildStep "Updating OSD module..." 55
 Install-Module OSD -Force -AllowClobber
 Import-Module OSD -Force
 
-Write-BuildStep "Creating Template and Workspace..." 30
+Write-BuildStep "Creating Template and Workspace..." 60
 New-OSDCloudTemplate -WinRE
 New-OSDCloudWorkspace
 
-Write-BuildStep "Adding Intel drivers..." 45
+Write-BuildStep "Adding Intel drivers..." 70
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
 
 # Configure Windows 11 24H2 Enterprise with ZTI
-Write-BuildStep "Configuring Windows 11 24H2 Enterprise deployment..." 55
+Write-BuildStep "Configuring Windows 11 24H2 Enterprise deployment..." 75
 Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -ZTI
 
-Write-BuildStep "Finalizing WinPE..." 65
+Write-BuildStep "Finalizing WinPE..." 82
 Edit-OSDCloudWinPE
 
 # Make Start-OSDCloud run automatically on boot
-Write-BuildStep "Enabling full automation on boot..." 75
+Write-BuildStep "Enabling full automation on boot..." 88
 
 $startnetFile = Get-ChildItem -Path "$env:ProgramData\OSDCloud\Template" -Recurse -Filter "Startnet.cmd" | Select-Object -First 1 -ExpandProperty FullName
 
@@ -94,7 +97,7 @@ if ($startnetFile) {
 }
 
 # Output choice
-Write-BuildStep "Build complete. Choosing output..." 85
+Write-BuildStep "Build complete. Choosing output..." 92
 
 $choice = Read-Host "Create USB, ISO, or Both? (U = USB, I = ISO, B = Both)"
 
@@ -130,4 +133,4 @@ if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Complet
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
-Write-Host "LazyOSD - Windows 11 24H2 Enterprise (Fully Automatic)" -ForegroundColor Green
+Write-Host "LazyOSD - Windows 11 24H2 Enterprise (Fully Automatic + Audit Mode)" -ForegroundColor Green
