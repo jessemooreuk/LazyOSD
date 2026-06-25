@@ -1,37 +1,37 @@
 # Build-OSDCloudUSB.ps1
-# Fully automated build script for tenant-agnostic OSDCloud USB
-# with Audit Mode + local scripts (no WebPSScript)
+# Fully automated OSDCloud build with automatic script execution
 
-Write-Host "=== Building OSDCloud USB (Automated + Local Scripts) ===" -ForegroundColor Cyan
+Write-Host "=== Building Fully Automated OSDCloud USB ===" -ForegroundColor Cyan
 
-# 1. Update OSD module
-Write-Host "Updating OSD module..." -ForegroundColor Yellow
-Install-Module OSD -Force -AllowClobber -ErrorAction SilentlyContinue
+# 1. Update module
+Install-Module OSD -Force -AllowClobber
 Import-Module OSD -Force
 
-# 2. Create Template and Workspace
-Write-Host "Creating Template and Workspace..." -ForegroundColor Yellow
+# 2. Create Template + Workspace
 New-OSDCloudTemplate -WinRE -Verbose
 New-OSDCloudWorkspace -Verbose
 
-# 3. Add Intel drivers
-Write-Host "Adding Intel Wireless + LAN drivers..." -ForegroundColor Yellow
+# 3. Add drivers
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose
 
-# 4. Copy local scripts into workspace (Automation)
-Write-Host "Copying local scripts into workspace..." -ForegroundColor Yellow
-
+# 4. Copy scripts to workspace
 $workspaceScripts = "$env:ProgramData\OSDCloud\Workspace\Scripts"
 New-Item -Path $workspaceScripts -ItemType Directory -Force | Out-Null
 
-# Change these paths to where you keep your scripts
-$sourceScripts = "C:\OSDCloudScripts"   # <-- Change this to your folder
+Copy-Item "C:\OSDCloudScripts\Collect-AutopilotHash-WinPE.ps1" -Destination $workspaceScripts -Force
+Copy-Item "C:\OSDCloudScripts\AuditMode-AutopilotUpload.ps1" -Destination $workspaceScripts -Force
 
-Copy-Item "$sourceScripts\Collect-AutopilotHash-WinPE.ps1" -Destination $workspaceScripts -Force
-Copy-Item "$sourceScripts\AuditMode-AutopilotUpload.ps1" -Destination $workspaceScripts -Force
+# 5. Make hash collection run automatically in WinPE (modify Startnet.cmd)
+Write-Host "Configuring automatic hash collection in WinPE..." -ForegroundColor Yellow
 
-# 5. Configure Unattend for Audit Mode
-Write-Host "Configuring Unattend for Audit Mode..." -ForegroundColor Yellow
+$startnet = Get-Content "X:\Windows\System32\Startnet.cmd" -ErrorAction SilentlyContinue
+if (-not $startnet) { $startnet = @() }
+
+$startnet += "powershell -NoLogo -File X:\Scripts\Collect-AutopilotHash-WinPE.ps1"
+$startnet | Out-File "X:\Windows\System32\Startnet.cmd" -Encoding ASCII -Force
+
+# 6. Configure Unattend with automatic script in Audit Mode
+Write-Host "Configuring Unattend for automatic Audit Mode execution..." -ForegroundColor Yellow
 
 $unattend = @'
 <?xml version="1.0" encoding="utf-8"?>
@@ -41,6 +41,13 @@ $unattend = @'
       <Reseal>
         <Mode>Audit</Mode>
       </Reseal>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>powershell -NoLogo -File "C:\Scripts\AuditMode-AutopilotUpload.ps1"</CommandLine>
+          <Description>Run Autopilot Hash Upload</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
     </component>
   </settings>
 </unattend>
@@ -49,10 +56,8 @@ $unattend = @'
 $unattend | Out-File -FilePath "$env:ProgramData\OSDCloud\Unattend.xml" -Encoding utf8 -Force
 Edit-OSDCloudWinPE -Unattend "$env:ProgramData\OSDCloud\Unattend.xml" -Verbose
 
-# 6. Build the USB
-Write-Host "Building USB..." -ForegroundColor Yellow
+# 7. Build USB
 New-OSDCloudUSB
 
-Write-Host ""
 Write-Host "=== Build Complete ===" -ForegroundColor Green
-Write-Host "Your USB now contains local scripts and will boot into Audit Mode." -ForegroundColor Green
+Write-Host "Scripts will now run automatically in WinPE and Audit Mode." -ForegroundColor Green
