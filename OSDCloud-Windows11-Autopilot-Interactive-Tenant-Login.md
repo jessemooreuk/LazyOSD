@@ -1,13 +1,15 @@
 # Automated installation of Windows 11 using OSDCloud
 
 **Booting from a USB Stick**  
-**Automatically registering in Autopilot using interactive tenant credentials (Entra ID / Azure AD login)**  
+**Automatically registering in Autopilot (Tenant-Agnostic)**  
 **Includes all common Intel wireless and LAN drivers**  
 **OSDCloud supports WiFi Connection**
 
-This is the **corrected and up-to-date** private guide (June 2026) for creating a fully automated Windows 11 OSDCloud USB deployment.
+**Universal / Tenant-Agnostic Version** (June 2026)
 
-> **Important fix**: Older documentation used `New-OSDCloud.template` (with a dot). The current correct cmdlet is `New-OSDCloudTemplate` (no dot).
+This guide creates a **single universal OSDCloud USB** that works with **any Entra ID tenant** without hardcoding Tenant IDs, Client IDs, or Secrets.
+
+> The deployment is fully interactive during Autopilot registration so the same USB can be used across multiple customers or environments.
 
 ## Prerequisites
 - Windows 10 (1703+) or Windows 11 PC with administrator rights and internet
@@ -21,13 +23,11 @@ Install-Module OSD -Force -AllowClobber -Verbose
 Import-Module OSD -Force
 ```
 
-## Step 2: Create OSDCloud Template with WinRE (Required for WiFi Support)
+## Step 2: Create OSDCloud Template with WinRE (for WiFi Support)
 
 ```powershell
 New-OSDCloudTemplate -WinRE -Verbose
 ```
-
-This builds the WinPE/WinRE environment with wireless support.
 
 ## Step 3: Create the Workspace
 
@@ -35,51 +35,30 @@ This builds the WinPE/WinRE environment with wireless support.
 New-OSDCloudWorkspace -Verbose
 ```
 
-## Step 4: Inject All Common Intel Wireless + LAN Drivers
+## Step 4: Add All Common Intel Wireless + LAN Drivers
 
 ```powershell
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,* -Verbose
 ```
 
-This adds:
-- `WiFi` → Intel Wireless drivers
-- `IntelNet` → Intel LAN/Ethernet drivers
-- `*` → All other common drivers (Dell, HP, Lenovo, etc.)
+## Step 5: Add Tenant-Agnostic Autopilot Registration Script
 
-## Step 5: Interactive Autopilot Tenant Login (Recommended)
+Use the latest tenant-agnostic script. It uses **Device Code Flow** by default so no tenant details are stored in the USB.
 
-Use this script so the technician can **login with their own Entra ID credentials** to automatically register the device in Autopilot.
+### Latest Tenant-Agnostic Script
 
-### Autopilot-Interactive-Login.ps1
+**Direct link:** https://github.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/blob/main/Autopilot-Interactive-Login.ps1
 
-```powershell
-# Autopilot-Interactive-Login.ps1
-Write-Host "=== Autopilot Registration - Tenant Login Required ===" -ForegroundColor Cyan
-Write-Host "Sign in with your Entra ID credentials to automatically register this device." -ForegroundColor Yellow
-
-# Option A: Simple credential prompt
-$creds = Get-Credential -Message "Enter your tenant UPN (user@yourcompany.com) and password"
-
-# Option B: Device Code Flow (Recommended for security)
-# Write-Host "Visit https://microsoft.com/devicelogin and enter the code shown."
-# Connect-MgGraph -UseDeviceCode -Scopes "DeviceManagementManagedDevices.ReadWrite.All"
-
-try {
-    Write-Host "Authentication successful. Uploading hardware hash..." -ForegroundColor Green
-    $hash = Get-WindowsAutoPilotInfo -OutputObject
-    # Add your Graph upload logic here if desired
-    Write-Host "Device successfully registered in Autopilot!" -ForegroundColor Green
-} catch {
-    Write-Host "Error: $_" -ForegroundColor Red
-}
-Start-Sleep -Seconds 3
-```
-
-### Include the script during build
+### Include it during the build
 
 ```powershell
-Edit-OSDCloudWinPE -WebPSScript https://raw.githubusercontent.com/YOURUSERNAME/YOURREPO/main/Autopilot-Interactive-Login.ps1 -Verbose
+Edit-OSDCloudWinPE -WebPSScript https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Autopilot-Interactive-Login.ps1 -Verbose
 ```
+
+The script will:
+- Prompt the technician to authenticate via Device Code Flow to **any target tenant**
+- Automatically collect the hardware hash
+- Upload the device to Autopilot using the signed-in context
 
 ## Step 6: Build the Bootable USB
 
@@ -87,35 +66,36 @@ Edit-OSDCloudWinPE -WebPSScript https://raw.githubusercontent.com/YOURUSERNAME/Y
 New-OSDCloudUSB
 ```
 
-(or `Update-OSDCloudUSB` if updating an existing one)
-
-## Step 7: Boot from USB and Deploy
+## Step 7: Boot & Deploy (Tenant Agnostic Flow)
 
 1. Boot the target device from the USB.
-2. WinPE/WinRE starts with WiFi support enabled.
-3. Connect to WiFi (Intel adapters work great).
-4. Windows 11 is downloaded and installed automatically.
-5. At the Autopilot stage the script prompts for **tenant login**.
-6. Device hash is uploaded automatically → registered in Autopilot.
-7. Reboots into clean OOBE ready for full Autopilot enrollment.
+2. WinPE starts with full WiFi support.
+3. Connect to WiFi if needed.
+4. Windows 11 installs automatically.
+5. At the Autopilot step the script runs Device Code authentication.
+6. Technician signs in to the **correct tenant** on any device.
+7. Device hash is uploaded automatically.
+8. Reboots into clean OOBE ready for Autopilot enrollment.
 
-## Useful Diagnostic Commands
+## Making Your Deployment Fully Tenant Agnostic
+
+- Do **not** hardcode any Tenant ID, Client ID, or Client Secret in the script or USB.
+- Rely on interactive authentication (Device Code Flow is ideal).
+- The same USB works for every customer/environment.
+- App Registration is **optional** and should only be created per-tenant if you need app-only automation in specific cases.
+
+## Useful Commands
 
 ```powershell
-# List all OSDCloud commands
 Get-Command -Module OSD | Where-Object Name -like '*OSDCloud*'
-
-# Check current template
 Get-OSDCloudTemplate
 ```
 
-## Security & Notes
-- The account used for login needs permission to import devices into Autopilot.
-- Prefer Device Code Flow when possible.
-- Always test in a lab first.
-- This USB gives you: WiFi support + full Intel wireless/LAN drivers + interactive Autopilot registration.
+## Security Notes
+- Device Code Flow is the most secure interactive method.
+- The technician only needs an account with permission to import devices in the target tenant.
+- Test thoroughly before production use.
 
 ---
 
-**Private repository updated with corrected cmdlets (June 2026).**
-All cmdlet names are now accurate for the current OSD module.
+**This is now a complete universal OSDCloud solution** for Automated Windows 11 deployment from USB with WiFi, Intel drivers, and tenant-agnostic Autopilot registration.
