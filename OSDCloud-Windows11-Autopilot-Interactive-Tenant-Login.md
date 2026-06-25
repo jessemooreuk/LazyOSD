@@ -1,20 +1,20 @@
-# Automated installation of Windows 11 using OSDCloud
+# LazyOSD
 
-**Booting from a USB Stick**  
-**Automatically registering in Autopilot (Tenant-Agnostic)**  
-**Includes all common Intel wireless and LAN drivers**  
-**OSDCloud supports WiFi Connection**
-
-**Simplified & Reliable Workflow (Recommended)**
+**Automated Enterprise OSD + Intune Enrollment**
 
 ## Overview
 
-This version focuses on maximum reliability:
+LazyOSD provides an automated, out-of-the-box method of creating a Windows 11 OSD image for enterprise use, with automatic enrollment into Intune using a user’s M365 account.
 
-- **WinPE**: Clean Windows 11 installation only
-- **Audit Mode**: Automatically collects hardware hash + uploads to Autopilot + exits to normal OOBE
+## Key Features
 
-Everything important (hash collection + upload) now happens in Audit Mode (full Windows environment).
+- Windows 11 24H2 Enterprise
+- Fully automatic installation
+- Automatic boot into Audit Mode
+- Automatic hardware hash collection + upload to Autopilot/Intune
+- Device Code Flow authentication (tenant-agnostic)
+- Intel Wireless + LAN drivers included
+- WiFi support in WinPE
 
 ## How to Build
 
@@ -22,29 +22,24 @@ Everything important (hash collection + upload) now happens in Audit Mode (full 
 irm https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Build-OSDCloudUSB.ps1 | iex
 ```
 
-The build script will:
-- Ask for a Project Name (used for ISO filename)
-- Ask if you want Progress Bar or Verbose output
-- Download the Audit Mode script
-- Configure automatic boot into Audit Mode
-- Let you choose USB, ISO, or Both at the end
+The build will ask for a Project Name and whether you want Progress Bar or Verbose output.
 
-## What Happens During Deployment
+## Deployment Flow
 
-1. **WinPE** → Clean Windows 11 installation (fully automatic)
-2. **First Boot** → Automatically boots into **Audit Mode**
-3. **Audit Mode** (automatic):
-   - Prompts to connect to WiFi (if needed)
+1. Boot from USB/ISO
+2. Windows 11 installs automatically
+3. Device automatically enters Audit Mode
+4. Script runs automatically:
+   - Prompts for WiFi (if needed)
    - Collects hardware hash
-   - Authenticates using Device Code Flow (tenant-agnostic)
-   - Uploads device to Autopilot
+   - Uploads to Intune/Autopilot using M365 credentials
    - Exits Audit Mode and reboots into normal OOBE
 
 ## Files
 
 - `Build-OSDCloudUSB.ps1` – Main build script
-- `AuditMode-AutopilotUpload.ps1` – Runs automatically in Audit Mode (collection + upload + exit to OOBE)
+- `AuditMode-AutopilotUpload.ps1` – Runs automatically in Audit Mode
 
 ---
 
-**This is currently the cleanest and most reliable workflow.**
+**LazyOSD** – Making enterprise OSD simple and automated.
