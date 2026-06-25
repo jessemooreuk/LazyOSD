@@ -31,7 +31,7 @@ Write-BuildStep "Downloading Audit Mode script..." 10
 $workspaceRoot = "$env:ProgramData\OSDCloud\Workspace"
 New-Item -Path $workspaceRoot -ItemType Directory -Force | Out-Null
 
-$baseUrl = "https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main"
+$baseUrl = "https://raw.githubusercontent.com/jessemooreuk/LazyOSD/main"
 
 try {
     Invoke-WebRequest -Uri "$baseUrl/AuditMode-AutopilotUpload.ps1" -OutFile "$workspaceRoot\AuditMode-AutopilotUpload.ps1" -UseBasicParsing -ErrorAction Stop
@@ -63,7 +63,7 @@ $unattendContent = @'
 
 $unattendContent | Out-File -FilePath "$workspaceRoot\Unattend.xml" -Encoding utf8 -Force
 
-# Apply the Unattend properly (this was missing before)
+# Apply the Unattend properly
 Write-BuildStep "Applying Unattend for Audit Mode..." 50
 Edit-OSDCloudWinPE -Unattend "$workspaceRoot\Unattend.xml"
 

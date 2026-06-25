@@ -4,6 +4,8 @@
 
 Automated creation of a Windows 11 OSD image with automatic enrollment into Intune using a user’s M365 account.
 
+**Repository:** https://github.com/jessemooreuk/LazyOSD
+
 ## What is LazyOSD?
 
 LazyOSD is a simplified, automated method of building a fully functional OSD (Operating System Deployment) image using OSDCloud.
@@ -27,7 +29,7 @@ It is designed for enterprise environments where you want:
 ## Quick Start
 
 ```powershell
-irm https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main/Build-OSDCloudUSB.ps1 | iex
+irm https://raw.githubusercontent.com/jessemooreuk/LazyOSD/main/Build-OSDCloudUSB.ps1 | iex
 ```
 
 ## Workflow
