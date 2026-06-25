@@ -1,19 +1,17 @@
 # Build-OSDCloudUSB.ps1
-# Fully automated OSDCloud build with correct ISO detection
+# Simplified build focused on Audit Mode automation
 
-Write-Host "=== OSDCloud Automated Build ===" -ForegroundColor Cyan
+Write-Host "=== OSDCloud Automated Build (Audit Mode Focus) ===" -ForegroundColor Cyan
 
-# Project Name
-$ProjectName = Read-Host "Enter Project Name (used for Workspace and ISO filename)"
+$ProjectName = Read-Host "Enter Project Name (used for ISO filename)"
 if ([string]::IsNullOrWhiteSpace($ProjectName)) { $ProjectName = "OSDCloud-Autopilot" }
 Write-Host "Project: $ProjectName" -ForegroundColor Green
 
-# Progress vs Verbose
 $mode = Read-Host "Show simple progress bar or verbose output? (P = Progress bar, V = Verbose)"
 $UseProgressBar = ($mode.ToUpper() -eq "P")
 
 if ($UseProgressBar) {
-    Write-Host "Progress bar mode enabled (errors will still show)." -ForegroundColor Green
+    Write-Host "Progress bar mode enabled." -ForegroundColor Green
 } else {
     Write-Host "Verbose mode enabled." -ForegroundColor Green
 }
@@ -27,8 +25,8 @@ function Write-BuildStep {
     }
 }
 
-# Download scripts
-Write-BuildStep "Downloading required scripts..." 10
+# Download the Audit Mode script
+Write-BuildStep "Downloading Audit Mode script..." 10
 
 $workspaceRoot = "$env:ProgramData\OSDCloud\Workspace"
 New-Item -Path $workspaceRoot -ItemType Directory -Force | Out-Null
@@ -36,14 +34,13 @@ New-Item -Path $workspaceRoot -ItemType Directory -Force | Out-Null
 $baseUrl = "https://raw.githubusercontent.com/jessemooreuk/osdcloud-windows11-autopilot-interactive-login/main"
 
 try {
-    Invoke-WebRequest -Uri "$baseUrl/Collect-AutopilotHash-WinPE.ps1" -OutFile "$workspaceRoot\Collect-AutopilotHash-WinPE.ps1" -UseBasicParsing -ErrorAction Stop
     Invoke-WebRequest -Uri "$baseUrl/AuditMode-AutopilotUpload.ps1" -OutFile "$workspaceRoot\AuditMode-AutopilotUpload.ps1" -UseBasicParsing -ErrorAction Stop
 } catch {
-    Write-Host "ERROR: Failed to download scripts. $_" -ForegroundColor Red
+    Write-Host "ERROR: Failed to download script. $_" -ForegroundColor Red
     exit
 }
 
-# Place Unattend.xml in workspace root
+# Place Unattend.xml for automatic Audit Mode + script execution
 $unattendContent = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -56,7 +53,7 @@ $unattendContent = @'
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
           <CommandLine>powershell -NoLogo -File "X:\AuditMode-AutopilotUpload.ps1"</CommandLine>
-          <Description>Run Autopilot Upload Automatically</Description>
+          <Description>Collect hash, upload to Autopilot, exit to OOBE</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>
@@ -73,7 +70,7 @@ Import-Module OSD -Force
 
 Write-BuildStep "Creating Template and Workspace..." 30
 New-OSDCloudTemplate -WinRE
-New-OSDCloudWorkspace -Name $ProjectName
+New-OSDCloudWorkspace
 
 Write-BuildStep "Adding Intel drivers..." 45
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
@@ -82,59 +79,40 @@ Write-BuildStep "Finalizing WinPE..." 60
 Edit-OSDCloudWinPE
 
 # Output choice
-Write-BuildStep "Build complete. Choosing output format..." 80
+Write-BuildStep "Build complete. Choosing output..." 80
 
 $choice = Read-Host "Create USB, ISO, or Both? (U = USB, I = ISO, B = Both)"
 
 switch ($choice.ToUpper()) {
-    "U" { 
-        Write-Host "Creating USB..." -ForegroundColor Yellow
-        New-OSDCloudUSB 
-    }
+    "U" { New-OSDCloudUSB }
     "I" { 
-        Write-Host "Creating ISO..." -ForegroundColor Yellow
         New-OSDCloudISO
-
-        # Correctly find the newly created ISO in C:\OSDCloud
         Start-Sleep -Seconds 2
-        $latestIso = Get-ChildItem -Path "C:\OSDCloud" -Filter "*.iso" | 
-                     Sort-Object LastWriteTime -Descending | 
-                     Select-Object -First 1
-
+        $latestIso = Get-ChildItem -Path "C:\OSDCloud" -Filter "*.iso" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if ($latestIso) {
             $newName = "$ProjectName.iso"
             $destination = Join-Path "$env:USERPROFILE\Downloads" $newName
             Move-Item -Path $latestIso.FullName -Destination $destination -Force
-            Write-Host "ISO renamed and moved to: $destination" -ForegroundColor Green
-        } else {
-            Write-Host "Warning: Could not find the created ISO to rename." -ForegroundColor Yellow
+            Write-Host "ISO saved as: $destination" -ForegroundColor Green
         }
     }
     "B" { 
-        Write-Host "Creating USB..." -ForegroundColor Yellow
         New-OSDCloudUSB
-        Write-Host "Creating ISO..." -ForegroundColor Yellow
         New-OSDCloudISO
-
         Start-Sleep -Seconds 2
-        $latestIso = Get-ChildItem -Path "C:\OSDCloud" -Filter "*.iso" | 
-                     Sort-Object LastWriteTime -Descending | 
-                     Select-Object -First 1
-
+        $latestIso = Get-ChildItem -Path "C:\OSDCloud" -Filter "*.iso" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if ($latestIso) {
             $newName = "$ProjectName.iso"
             $destination = Join-Path "$env:USERPROFILE\Downloads" $newName
             Move-Item -Path $latestIso.FullName -Destination $destination -Force
-            Write-Host "ISO renamed and moved to: $destination" -ForegroundColor Green
+            Write-Host "ISO saved as: $destination" -ForegroundColor Green
         }
     }
-    default { 
-        Write-Host "Creating USB..." -ForegroundColor Yellow
-        New-OSDCloudUSB 
-    }
+    default { New-OSDCloudUSB }
 }
 
 if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Completed }
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
+Write-Host "Workflow: WinPE (clean install) → Automatic Audit Mode (hash collection + upload + exit to OOBE)" -ForegroundColor Green

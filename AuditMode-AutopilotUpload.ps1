@@ -1,63 +1,44 @@
 # AuditMode-AutopilotUpload.ps1
-# Runs in Audit Mode after Windows 11 installation
-# Prompts technician to connect to WiFi
-# Uses Device Code Flow (tenant-agnostic)
-# Uploads hardware hash to Autopilot
-# Then automatically exits Audit Mode and reboots into OOBE
+# Runs automatically in Audit Mode
+# Collects hardware hash + uploads to Autopilot + exits to OOBE
+# Tenant-agnostic using Device Code Flow
 
 Write-Host "=== Autopilot Registration - Audit Mode ===" -ForegroundColor Cyan
 Write-Host ""
 
-# =============================================
-# STEP 1: Prompt for WiFi Connection
-# =============================================
-Write-Host "Please connect to WiFi now if you are not using a wired connection." -ForegroundColor Yellow
-Write-Host "Press Enter when you are connected to the internet..." -ForegroundColor Yellow
+# Step 1: Prompt for WiFi if needed
+Write-Host "Please connect to WiFi now if you are not on a wired connection." -ForegroundColor Yellow
+Write-Host "Press Enter when connected to the internet..." -ForegroundColor Yellow
 Read-Host | Out-Null
 
+Write-Host "Proceeding with hardware hash collection and upload..." -ForegroundColor Green
 Write-Host ""
-Write-Host "Proceeding with Autopilot registration..." -ForegroundColor Green
 
-# =============================================
-# STEP 2: Load hash from file (created in WinPE)
-# =============================================
-$hashFile = "C:\AutopilotHash.txt"
-
-if (-not (Test-Path $hashFile)) {
-    Write-Host "ERROR: $hashFile not found!" -ForegroundColor Red
-    Write-Host "Please ensure the hash was collected during WinPE deployment." -ForegroundColor Red
-    pause
-    exit
-}
-
+# Step 2: Collect hardware hash
 try {
-    $hash = Get-Content $hashFile | ConvertFrom-Json
-    Write-Host "Hardware hash loaded successfully." -ForegroundColor Green
+    Write-Host "Collecting hardware hash..." -ForegroundColor Yellow
+    $hash = Get-WindowsAutoPilotInfo -OutputObject
+    Write-Host "Hardware hash collected successfully." -ForegroundColor Green
 } catch {
-    Write-Host "Failed to read hash file. Error: $_" -ForegroundColor Red
+    Write-Host "ERROR: Failed to collect hardware hash. $_" -ForegroundColor Red
     pause
     exit
 }
 
-# =============================================
-# STEP 3: Authenticate with Device Code Flow (Tenant Agnostic)
-# =============================================
-Write-Host ""
+# Step 3: Authenticate with Device Code Flow
 Write-Host "Starting Device Code authentication..." -ForegroundColor Yellow
-Write-Host "A code will be shown. Go to https://microsoft.com/devicelogin on any device and sign in."
+Write-Host "A code will appear. Go to https://microsoft.com/devicelogin on any device and sign in with your tenant credentials."
 
 try {
     Connect-MgGraph -UseDeviceCode -Scopes "DeviceManagementManagedDevices.ReadWrite.All" -NoWelcome
     Write-Host "Authentication successful!" -ForegroundColor Green
 } catch {
-    Write-Host "Authentication failed: $_" -ForegroundColor Red
+    Write-Host "ERROR: Authentication failed. $_" -ForegroundColor Red
     pause
     exit
 }
 
-# =============================================
-# STEP 4: Upload Device to Autopilot
-# =============================================
+# Step 4: Upload to Autopilot
 try {
     Write-Host "Uploading device to Autopilot..." -ForegroundColor Yellow
     
@@ -76,14 +57,12 @@ try {
     
 } catch {
     Write-Host "Upload failed: $_" -ForegroundColor Red
-    Write-Host "You can still continue to OOBE and register manually." -ForegroundColor Yellow
+    Write-Host "You can still continue manually if needed." -ForegroundColor Yellow
 }
 
-# =============================================
-# STEP 5: Exit Audit Mode and Reboot into OOBE
-# =============================================
+# Step 5: Exit Audit Mode and reboot into OOBE
 Write-Host ""
-Write-Host "Exiting Audit Mode and rebooting into OOBE..." -ForegroundColor Cyan
+Write-Host "Exiting Audit Mode and rebooting into normal OOBE..." -ForegroundColor Cyan
 Start-Sleep -Seconds 3
 
 sysprep /oobe /reboot
