@@ -96,14 +96,21 @@ Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -
 Write-BuildStep "Finalizing WinPE..." 82
 Edit-OSDCloudWinPE
 
-# Make Start-OSDCloud run automatically on boot
-Write-BuildStep "Enabling full automation on boot..." 88
+# Overwrite Startnet.cmd for full automation (more reliable than appending)
+Write-BuildStep "Configuring automatic boot..." 88
 
 $startnetFile = Get-ChildItem -Path "$env:ProgramData\OSDCloud\Template" -Recurse -Filter "Startnet.cmd" | Select-Object -First 1 -ExpandProperty FullName
 
 if ($startnetFile) {
-    Add-Content -Path $startnetFile -Value "powershell -NoLogo -Command \"Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -ZTI\""
-    Write-Host "Automation enabled in Startnet.cmd" -ForegroundColor Green
+    $newStartnet = @'
+@ECHO OFF
+wpeinit
+cd\
+title LazyOSD 26.6.25.1
+powershell -NoLogo -Command "Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -ZTI"
+'@ 
+    Set-Content -Path $startnetFile -Value $newStartnet -Force
+    Write-Host "Startnet.cmd overwritten for full automation" -ForegroundColor Green
 }
 
 # Output choice
