@@ -89,15 +89,26 @@ New-OSDCloudWorkspace
 Write-BuildStep "Adding Intel drivers..." 70
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
 
-# Use hosted script method (recommended in Akos Bakos article)
-Write-BuildStep "Configuring automation via hosted script..." 75
+# Create properly structured Startnet.cmd
+Write-BuildStep "Creating properly ordered Startnet.cmd..." 78
 
-$hostedScriptUrl = "https://raw.githubusercontent.com/jessemooreuk/LazyOSD/main/Start-LazyOSD.ps1"
+$startnetFile = Get-ChildItem -Path "$env:ProgramData\OSDCloud\Template" -Recurse -Filter "Startnet.cmd" | Select-Object -First 1 -ExpandProperty FullName
 
-Edit-OSDCloudWinPE -WebPSScript $hostedScriptUrl
+if ($startnetFile) {
+    $newStartnet = @'
+@ECHO OFF
+wpeinit
+cd\
+title LazyOSD 26.6.25.1
 
-Write-BuildStep "Finalizing WinPE..." 82
-Edit-OSDCloudWinPE
+PowerShell -NoL -C Initialize-OSDCloudStartnet
+PowerShell -NoL -C Initialize-OSDCloudStartnetUpdate
+
+PowerShell -NoL -C Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -ZTI
+'@ 
+    Set-Content -Path $startnetFile -Value $newStartnet -Force
+    Write-Host "Startnet.cmd created with correct initialization order" -ForegroundColor Green
+}
 
 # Output choice
 Write-BuildStep "Build complete. Choosing output..." 88
@@ -136,4 +147,4 @@ if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Complet
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
-Write-Host "LazyOSD - Windows 11 24H2 Enterprise (Hosted Script Method)" -ForegroundColor Green
+Write-Host "LazyOSD - Windows 11 24H2 Enterprise (Proper Startnet Order)" -ForegroundColor Green
