@@ -89,38 +89,18 @@ New-OSDCloudWorkspace
 Write-BuildStep "Adding Intel drivers..." 70
 Edit-OSDCloudWinPE -CloudDriver WiFi,IntelNet,*
 
-# Compatible ZTI configuration
-Write-BuildStep "Configuring Windows 11 24H2 Enterprise deployment..." 75
-Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -ZTI
+# Proper ZTI method using -ConfigUrl (recommended approach)
+Write-BuildStep "Configuring true Zero Touch Installation..." 75
 
-Write-BuildStep "Creating dedicated automation launcher..." 82
+$configUrl = "https://raw.githubusercontent.com/jessemooreuk/LazyOSD/main/LazyOSD-Config.ps1"
 
-# Create a dedicated launcher script (more reliable than long command in Startnet.cmd)
-$launcherScript = @'
-# Start-LazyOSD.ps1
-# Dedicated launcher for full zero-touch automation
-Start-OSDCloud -OSVersion 'Windows 11' -OSBuild '24H2' -OSEdition 'Enterprise' -ZTI
-'@ 
+Start-OSDCloud -ConfigUrl $configUrl -ZTI
 
-$launcherScript | Out-File -FilePath "$workspaceRoot\Start-LazyOSD.ps1" -Encoding utf8 -Force
-
-# Overwrite Startnet.cmd to call the dedicated launcher
-$startnetFile = Get-ChildItem -Path "$env:ProgramData\OSDCloud\Template" -Recurse -Filter "Startnet.cmd" | Select-Object -First 1 -ExpandProperty FullName
-
-if ($startnetFile) {
-    $newStartnet = @'
-@ECHO OFF
-wpeinit
-cd\
-title LazyOSD 26.6.25.1
-powershell -NoLogo -File X:\Start-LazyOSD.ps1
-'@ 
-    Set-Content -Path $startnetFile -Value $newStartnet -Force
-    Write-Host "Startnet.cmd configured to use dedicated launcher" -ForegroundColor Green
-}
+Write-BuildStep "Finalizing WinPE..." 82
+Edit-OSDCloudWinPE
 
 # Output choice
-Write-BuildStep "Build complete. Choosing output..." 92
+Write-BuildStep "Build complete. Choosing output..." 88
 
 $choice = Read-Host "Create USB, ISO, or Both? (U = USB, I = ISO, B = Both)"
 
@@ -156,4 +136,4 @@ if ($UseProgressBar) { Write-Progress -Activity "Building $ProjectName" -Complet
 
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Project: $ProjectName" -ForegroundColor Green
-Write-Host "LazyOSD - Windows 11 24H2 Enterprise (Fully Automatic + Audit Mode)" -ForegroundColor Green
+Write-Host "LazyOSD - Windows 11 24H2 Enterprise (True ZTI via ConfigUrl)" -ForegroundColor Green
